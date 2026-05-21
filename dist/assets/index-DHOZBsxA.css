@@ -1,1 +1,0 @@
-body{margin:0;font-family:sans-serif;overflow:hidden}.layer-ui{z-index:10;flex-direction:column;gap:8px;display:flex;position:fixed;bottom:16px;left:16px}.layer-button{color:#fff;background:#222;border:none;border-radius:8px;width:96px;padding:10px 12px;font-size:16px;font-weight:700}.layer-button.active{opacity:1}.layer-button.inactive{opacity:.4}
