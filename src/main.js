@@ -20,6 +20,7 @@ const renderer = new THREE.WebGLRenderer({
 renderer.setSize(window.innerWidth, window.innerHeight)
 renderer.setPixelRatio(window.devicePixelRatio)
 renderer.xr.enabled = true
+
 document.body.appendChild(renderer.domElement)
 
 document.body.appendChild(
@@ -37,11 +38,37 @@ const placedGroup = new THREE.Group()
 placedGroup.position.set(0, 0, -1.5)
 scene.add(placedGroup)
 
+const BASE_PATH = '/q7Ibg5jhqdHRTcDokXP8'
+
 const layers = [
-  { id: '889_4', label: '第4層', path: './models/889_4.glb', visible: false, object: null },
-  { id: '889_3', label: '第3層', path: './models/889_3.glb', visible: false, object: null },
-  { id: '889_2', label: '第2層', path: './models/889_2.glb', visible: false, object: null },
-  { id: '889_1', label: '第1層', path: './models/889_1.glb', visible: true, object: null },
+  {
+    id: '889_4',
+    label: '第4層',
+    path: `${BASE_PATH}/models/889_4.glb`,
+    visible: false,
+    object: null,
+  },
+  {
+    id: '889_3',
+    label: '第3層',
+    path: `${BASE_PATH}/models/889_3.glb`,
+    visible: false,
+    object: null,
+  },
+  {
+    id: '889_2',
+    label: '第2層',
+    path: `${BASE_PATH}/models/889_2.glb`,
+    visible: false,
+    object: null,
+  },
+  {
+    id: '889_1',
+    label: '第1層',
+    path: `${BASE_PATH}/models/889_1.glb`,
+    visible: true,
+    object: null,
+  },
 ]
 
 const ui = document.createElement('div')
@@ -50,8 +77,12 @@ document.body.appendChild(ui)
 
 layers.forEach((layer) => {
   const button = document.createElement('button')
+
   button.textContent = layer.label
-  button.className = layer.visible ? 'layer-button active' : 'layer-button inactive'
+
+  button.className = layer.visible
+    ? 'layer-button active'
+    : 'layer-button inactive'
 
   button.addEventListener('click', () => {
     layer.visible = !layer.visible
@@ -60,13 +91,16 @@ layers.forEach((layer) => {
       layer.object.visible = layer.visible
     }
 
-    button.className = layer.visible ? 'layer-button active' : 'layer-button inactive'
+    button.className = layer.visible
+      ? 'layer-button active'
+      : 'layer-button inactive'
   })
 
   ui.appendChild(button)
 
   loader.load(
     layer.path,
+
     (gltf) => {
       const model = gltf.scene
 
@@ -75,11 +109,14 @@ layers.forEach((layer) => {
       model.visible = layer.visible
 
       layer.object = model
+
       placedGroup.add(model)
 
       console.log(`${layer.label} loaded`)
     },
+
     undefined,
+
     (error) => {
       console.error(`${layer.label} load error:`, error)
     }
@@ -92,6 +129,8 @@ renderer.setAnimationLoop(() => {
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight
+
   camera.updateProjectionMatrix()
+
   renderer.setSize(window.innerWidth, window.innerHeight)
 })
