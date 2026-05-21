@@ -38,10 +38,10 @@ placedGroup.position.set(0, 0, -1.5)
 scene.add(placedGroup)
 
 const layers = [
-  { id: '889_4', label: '第4層', path: '/models/889_4.glb', visible: false, object: null },
-  { id: '889_3', label: '第3層', path: '/models/889_3.glb', visible: false, object: null },
-  { id: '889_2', label: '第2層', path: '/models/889_2.glb', visible: false, object: null },
-  { id: '889_1', label: '第1層', path: '/models/889_1.glb', visible: true, object: null },
+  { id: '889_4', label: '第4層', path: './models/889_4.glb', visible: false, object: null },
+  { id: '889_3', label: '第3層', path: './models/889_3.glb', visible: false, object: null },
+  { id: '889_2', label: '第2層', path: './models/889_2.glb', visible: false, object: null },
+  { id: '889_1', label: '第1層', path: './models/889_1.glb', visible: true, object: null },
 ]
 
 const ui = document.createElement('div')
