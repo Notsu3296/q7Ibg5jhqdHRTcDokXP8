@@ -1,136 +1,381 @@
 import * as THREE from 'three'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { ARButton } from 'three/examples/jsm/webxr/ARButton.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import './style.css'
 
-const scene = new THREE.Scene()
+let camera
+let scene
+let renderer
+let controller
+let reticle
 
-const camera = new THREE.PerspectiveCamera(
-  60,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  1000
-)
+let hitTestSource = null
+let hitTestSourceRequested = false
 
-const renderer = new THREE.WebGLRenderer({
-  antialias: true,
-  alpha: true,
-})
+let placedGroup = null
+let canPlace = false
+let currentMessage = ''
+let arButton = null
+let layerButtonsContainer = null
+let uiTouched = false
 
-renderer.setSize(window.innerWidth, window.innerHeight)
-renderer.setPixelRatio(window.devicePixelRatio)
-renderer.xr.enabled = true
-
-document.body.appendChild(renderer.domElement)
-
-document.body.appendChild(
-  ARButton.createButton(renderer, {
-    requiredFeatures: ['hit-test'],
-  })
-)
-
-const light = new THREE.HemisphereLight(0xffffff, 0x444444, 2)
-scene.add(light)
-
-const loader = new GLTFLoader()
-
-const placedGroup = new THREE.Group()
-placedGroup.position.set(0, 0, -1.5)
-scene.add(placedGroup)
+const MODEL_SCALE = 1
+const MODEL_OFFSET_Y = 0.05
 
 const BASE_PATH = '/q7Ibg5jhqdHRTcDokXP8'
 
-const layers = [
-  {
-    id: '889_4',
-    label: '第4層',
-    path: `${BASE_PATH}/models/889_4.glb`,
-    visible: false,
-    object: null,
-  },
-  {
-    id: '889_3',
-    label: '第3層',
-    path: `${BASE_PATH}/models/889_3.glb`,
-    visible: false,
-    object: null,
-  },
-  {
-    id: '889_2',
-    label: '第2層',
-    path: `${BASE_PATH}/models/889_2.glb`,
-    visible: false,
-    object: null,
-  },
-  {
-    id: '889_1',
-    label: '第1層',
-    path: `${BASE_PATH}/models/889_1.glb`,
-    visible: true,
-    object: null,
-  },
-]
+const MODEL_FILES = ['889_4', '889_3', '889_2', '889_1']
 
-const ui = document.createElement('div')
-ui.className = 'layer-ui'
-document.body.appendChild(ui)
+const LAYER_LABELS = {
+  '889_4': '第4層',
+  '889_3': '第3層',
+  '889_2': '第2層',
+  '889_1': '第1層',
+}
 
-layers.forEach((layer) => {
-  const button = document.createElement('button')
+const loadedModels = {}
 
-  button.textContent = layer.label
+const layerVisibleStates = {
+  '889_4': false,
+  '889_3': false,
+  '889_2': false,
+  '889_1': true,
+}
 
-  button.className = layer.visible
-    ? 'layer-button active'
-    : 'layer-button inactive'
+const info = document.createElement('div')
+info.id = 'info'
+document.body.appendChild(info)
 
-  button.addEventListener('click', () => {
-    layer.visible = !layer.visible
+init()
+animate()
 
-    if (layer.object) {
-      layer.object.visible = layer.visible
-    }
+function setInfo(message) {
+  if (currentMessage === message) return
+  currentMessage = message
+  info.innerHTML = `<p>${message}</p>`
+}
 
-    button.className = layer.visible
-      ? 'layer-button active'
-      : 'layer-button inactive'
+function init() {
+  scene = new THREE.Scene()
+
+  camera = new THREE.PerspectiveCamera(
+    70,
+    window.innerWidth / window.innerHeight,
+    0.01,
+    20
+  )
+
+  const hemiLight = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 3)
+  scene.add(hemiLight)
+
+  const dirLight = new THREE.DirectionalLight(0xffffff, 2)
+  dirLight.position.set(1, 2, 1)
+  scene.add(dirLight)
+
+  renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: true,
   })
 
-  ui.appendChild(button)
-
-  loader.load(
-    layer.path,
-
-    (gltf) => {
-      const model = gltf.scene
-
-      model.position.set(0, 0, 0)
-      model.scale.set(1, 1, 1)
-      model.visible = layer.visible
-
-      layer.object = model
-
-      placedGroup.add(model)
-
-      console.log(`${layer.label} loaded`)
-    },
-
-    undefined,
-
-    (error) => {
-      console.error(`${layer.label} load error:`, error)
-    }
-  )
-})
-
-renderer.setAnimationLoop(() => {
-  renderer.render(scene, camera)
-})
-
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight
-
-  camera.updateProjectionMatrix()
-
+  renderer.setPixelRatio(window.devicePixelRatio)
   renderer.setSize(window.innerWidth, window.innerHeight)
-})
+  renderer.xr.enabled = true
+
+  document.body.appendChild(renderer.domElement)
+
+  checkWebXRSupport()
+  createARButton()
+  loadAllModels()
+  createReticle()
+  createController()
+  createLayerButtons()
+  hideLayerButtons()
+
+  window.addEventListener('resize', onWindowResize)
+}
+
+function checkWebXRSupport() {
+  if (!navigator.xr) {
+    setInfo('このブラウザはWebXRに対応していません。')
+    return
+  }
+
+  navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+    if (supported) {
+      setInfo('3Dモデルを読み込み中...')
+    } else {
+      setInfo('この端末ではARを起動できません。')
+    }
+  })
+}
+
+function createARButton() {
+  arButton = ARButton.createButton(renderer, {
+    requiredFeatures: ['hit-test'],
+    optionalFeatures: ['dom-overlay'],
+    domOverlay: {
+      root: document.body,
+    },
+  })
+
+  arButton.classList.add('ar-start-button', 'ar-loading')
+  arButton.textContent = 'LOADING...'
+
+  arButton.addEventListener('click', () => {
+    arButton.classList.remove('ar-start-button')
+    arButton.classList.add('ar-stop-button')
+    showLayerButtons()
+  })
+
+  document.body.appendChild(arButton)
+}
+
+function loadAllModels() {
+  const loader = new GLTFLoader()
+  let loadedCount = 0
+
+  MODEL_FILES.forEach((name) => {
+    loader.load(
+      `${BASE_PATH}/models/${name}.glb`,
+
+      (gltf) => {
+        loadedModels[name] = gltf.scene
+        loadedCount++
+
+        setInfo(`3Dモデル読込中...<br>${loadedCount} / ${MODEL_FILES.length}`)
+
+        if (loadedCount === MODEL_FILES.length) {
+          if (arButton) {
+            arButton.classList.remove('ar-loading')
+            arButton.textContent = 'START AR'
+          }
+
+          setInfo('3Dモデル読み込み完了。<br>ARを開始してください。')
+        }
+      },
+
+      undefined,
+
+      (error) => {
+        setInfo(`モデル読込失敗：${name}`)
+        console.error(error)
+      }
+    )
+  })
+}
+
+function createReticle() {
+  reticle = new THREE.Mesh(
+    new THREE.RingGeometry(0.08, 0.1, 32).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.65,
+    })
+  )
+
+  reticle.matrixAutoUpdate = false
+  reticle.visible = false
+  scene.add(reticle)
+}
+
+function createController() {
+  controller = renderer.xr.getController(0)
+  controller.addEventListener('select', onSelect)
+  scene.add(controller)
+}
+
+function onSelect() {
+  if (uiTouched) return
+  if (placedGroup) return
+
+  if (Object.keys(loadedModels).length !== MODEL_FILES.length) {
+    setInfo('モデルを読み込み中です。')
+    return
+  }
+
+  if (!canPlace || !reticle.visible) {
+    setInfo('端末をゆっくり動かして、白い輪を探してください。')
+    return
+  }
+
+  placedGroup = new THREE.Group()
+
+  MODEL_FILES.forEach((name) => {
+    if (!layerVisibleStates[name]) return
+
+    const clone = loadedModels[name].clone(true)
+    clone.visible = true
+    clone.name = name
+    placedGroup.add(clone)
+  })
+
+  if (placedGroup.children.length === 0) {
+    setInfo('表示するレイヤーを選んでください。')
+    placedGroup = null
+    return
+  }
+
+  const position = new THREE.Vector3()
+  const quaternion = new THREE.Quaternion()
+  const scale = new THREE.Vector3()
+
+  reticle.matrix.decompose(position, quaternion, scale)
+
+  placedGroup.position.copy(position)
+  placedGroup.position.y += MODEL_OFFSET_Y
+  placedGroup.quaternion.copy(quaternion)
+  placedGroup.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE)
+
+  scene.add(placedGroup)
+
+  reticle.visible = false
+
+  setInfo('配置完了。<br>右側ボタンで表示切替できます。')
+}
+
+function createLayerButtons() {
+  layerButtonsContainer = document.createElement('div')
+  layerButtonsContainer.id = 'layer-buttons'
+
+  MODEL_FILES.forEach((name) => {
+    const button = document.createElement('button')
+
+    button.className = 'layer-button'
+    button.textContent = LAYER_LABELS[name]
+    button.dataset.layer = name
+
+    button.classList.toggle('inactive', !layerVisibleStates[name])
+
+    button.addEventListener('pointerdown', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      uiTouched = true
+
+      setTimeout(() => {
+        uiTouched = false
+      }, 300)
+    })
+
+    button.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      layerVisibleStates[name] = !layerVisibleStates[name]
+      button.classList.toggle('inactive', !layerVisibleStates[name])
+
+      if (!placedGroup) return
+
+      const existingModel = placedGroup.getObjectByName(name)
+
+      if (layerVisibleStates[name]) {
+        if (!existingModel && loadedModels[name]) {
+          const clone = loadedModels[name].clone(true)
+          clone.visible = true
+          clone.name = name
+          placedGroup.add(clone)
+        }
+      } else {
+        if (existingModel) {
+          placedGroup.remove(existingModel)
+        }
+      }
+    })
+
+    layerButtonsContainer.appendChild(button)
+  })
+
+  document.body.appendChild(layerButtonsContainer)
+}
+
+function showLayerButtons() {
+  if (layerButtonsContainer) {
+    layerButtonsContainer.style.display = 'flex'
+  }
+}
+
+function hideLayerButtons() {
+  if (layerButtonsContainer) {
+    layerButtonsContainer.style.display = 'none'
+  }
+}
+
+function animate() {
+  renderer.setAnimationLoop(render)
+}
+
+function render(timestamp, frame) {
+  if (frame) {
+    const referenceSpace = renderer.xr.getReferenceSpace()
+    const session = renderer.xr.getSession()
+
+    if (!hitTestSourceRequested) {
+      setInfo('端末をゆっくり動かして<br>床や机を認識してください')
+
+      session.requestReferenceSpace('viewer').then((viewerSpace) => {
+        session.requestHitTestSource({ space: viewerSpace }).then((source) => {
+          hitTestSource = source
+        })
+      })
+
+      session.addEventListener('end', resetARState)
+
+      hitTestSourceRequested = true
+    }
+
+    if (hitTestSource) {
+      const hitTestResults = frame.getHitTestResults(hitTestSource)
+
+      if (hitTestResults.length > 0) {
+        const hit = hitTestResults[0]
+        const pose = hit.getPose(referenceSpace)
+
+        reticle.visible = !placedGroup
+        reticle.matrix.fromArray(pose.transform.matrix)
+
+        canPlace = true
+
+        if (!placedGroup) {
+          setInfo('表示するレイヤーを選んで<br>白い輪の位置をタップします')
+        }
+      } else {
+        reticle.visible = false
+        canPlace = false
+      }
+    }
+  }
+
+  renderer.render(scene, camera)
+}
+
+function resetARState() {
+  hitTestSourceRequested = false
+  hitTestSource = null
+  canPlace = false
+
+  if (reticle) {
+    reticle.visible = false
+  }
+
+  if (placedGroup) {
+    scene.remove(placedGroup)
+    placedGroup = null
+  }
+
+  hideLayerButtons()
+
+  if (arButton) {
+    arButton.classList.remove('ar-stop-button')
+    arButton.classList.add('ar-start-button')
+    arButton.textContent = 'START AR'
+  }
+
+  setInfo('ARを終了しました。<br>再開する場合はSTART ARを押してください。')
+}
+
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight
+  camera.updateProjectionMatrix()
+  renderer.setSize(window.innerWidth, window.innerHeight)
+}
