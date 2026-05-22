@@ -18,11 +18,9 @@ const app = document.querySelector('#app')
 // Three.js 基本設定
 // =====================
 
-// 3D空間
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x202020)
 
-// カメラ
 const camera = new THREE.PerspectiveCamera(
   45,
   window.innerWidth / window.innerHeight,
@@ -31,7 +29,6 @@ const camera = new THREE.PerspectiveCamera(
 )
 camera.position.set(0, 0, 5)
 
-// 描画装置
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
   alpha: true,
@@ -45,28 +42,31 @@ app.appendChild(renderer.domElement)
 // ライト設定
 // =====================
 
-// 全体を明るくするライト
 const ambientLight = new THREE.AmbientLight(0xffffff, 1.2)
 scene.add(ambientLight)
 
-// 斜め前から当てるライト
 const directionalLight = new THREE.DirectionalLight(0xffffff, 2)
 directionalLight.position.set(3, 5, 5)
 scene.add(directionalLight)
 
 // =====================
+// 読み込み中表示
+// =====================
+
+const loadingText = document.createElement('div')
+loadingText.className = 'loading-text'
+loadingText.textContent = '読み込み中...'
+app.appendChild(loadingText)
+
+// =====================
 // モデル管理
 // =====================
 
-// GLB読み込み用
 const loader = new GLTFLoader()
 
-// モデル全体をまとめる親
 const modelRoot = new THREE.Group()
 scene.add(modelRoot)
 
-// レイヤー設定
-// objectName は Blender のアウトライナー上のオブジェクト名と一致させる
 const layers = [
   {
     id: 'layer1',
@@ -98,17 +98,19 @@ const layers = [
   },
 ]
 
+// =====================
 // GLB読み込み
+// =====================
+
 function loadModel() {
-loader.load(
-  `${import.meta.env.BASE_URL}models/889.glb`,
+  loader.load(
+    `${import.meta.env.BASE_URL}models/889.glb`,
 
     // 読み込み成功
     (gltf) => {
       const model = gltf.scene
       modelRoot.add(model)
 
-      // GLB内のオブジェクト名確認用ログ
       console.log('GLB loaded:', model)
 
       model.traverse((child) => {
@@ -130,26 +132,49 @@ loader.load(
         }
 
         layer.object = target
-        target.visible = layer.visible
       })
 
       fitModelToView()
+      applyLayerVisibility()
       updateLayerButtons()
+
+      // 読み込み表示を消す
+      loadingText.style.display = 'none'
     },
 
     // 読み込み進行中
-    undefined,
+    (progress) => {
+      if (!progress.total) return
+
+      const percent = Math.round((progress.loaded / progress.total) * 100)
+      loadingText.textContent = `読み込み中... ${percent}%`
+    },
 
     // 読み込み失敗
     (error) => {
       console.error('889.glb の読み込みに失敗:', error)
+      loadingText.textContent = 'モデルの読み込みに失敗しました'
     }
   )
 }
 
+// =====================
+// レイヤー表示反映
+// =====================
+
+function applyLayerVisibility() {
+  layers.forEach((layer) => {
+    if (!layer.object) return
+    layer.object.visible = layer.visible
+  })
+}
+
+// =====================
 // モデルを画面内に収める
+// =====================
+
 function fitModelToView() {
-  // いったん全オブジェクトを対象にしてサイズ計算
+  // 全層を一時的に表示して、全体サイズを正しく計算する
   const previousVisibleStates = []
 
   layers.forEach((layer) => {
@@ -181,10 +206,14 @@ function fitModelToView() {
 
   if (size.length() === 0) return
 
+  // X/Z方向は中央合わせ
   modelRoot.position.x = -center.x
   modelRoot.position.z = -center.z
-  modelRoot.position.y = -center.y - size.y * 1.5
 
+  // Y方向は少し下げる
+  modelRoot.position.y = -center.y - size.y * 0.15
+
+  // モデルの大きさを画面に合わせる
   const maxSize = Math.max(size.x, size.y, size.z)
   const targetSize = 2.5
   const baseScale = targetSize / maxSize
@@ -203,20 +232,20 @@ const ui = document.createElement('div')
 ui.className = 'ui'
 app.appendChild(ui)
 
-// タイトル
 const title = document.createElement('div')
 title.className = 'title'
 title.textContent = 'maibun_ar'
 ui.appendChild(title)
 
-// レイヤーボタン置き場
 const layerButtons = document.createElement('div')
 layerButtons.className = 'layer-buttons'
 ui.appendChild(layerButtons)
 
+// =====================
 // レイヤーボタン生成
+// =====================
+
 function createLayerButtons() {
-  // 表示順は上から第4層、第3層、第2層、第1層
   layers
     .slice()
     .reverse()
@@ -227,11 +256,7 @@ function createLayerButtons() {
 
       button.addEventListener('click', () => {
         layer.visible = !layer.visible
-
-        if (layer.object) {
-          layer.object.visible = layer.visible
-        }
-
+        applyLayerVisibility()
         updateLayerButtons()
       })
 
@@ -239,7 +264,6 @@ function createLayerButtons() {
     })
 }
 
-// レイヤーボタンの見た目更新
 function updateLayerButtons() {
   const buttons = layerButtons.querySelectorAll('button')
 
@@ -252,16 +276,14 @@ function updateLayerButtons() {
 }
 
 // =====================
-// 操作設定：共通パラメータ
+// 操作設定：調整用パラメータ
 // =====================
 
-// ここを変更すると操作感を調整できる
 const ROTATE_SPEED = 0.01
 const PAN_SPEED = 0.005
 const WHEEL_ZOOM_SPEED = 0.001
 const PINCH_ZOOM_SPEED = 0.01
 
-// 拡大縮小の限界
 const MIN_ZOOM = 0.4
 const MAX_ZOOM = 3.0
 
@@ -275,19 +297,13 @@ let zoomScale = 1
 // PC操作
 // =====================
 
-// 左ドラッグ：回転
-// 中央ボタンドラッグ：平行移動
-// ホイール：拡大縮小
-
 renderer.domElement.addEventListener('pointerdown', (event) => {
-  // タッチ操作は下の touch 系で処理する
   if (event.pointerType === 'touch') return
 
   isDragging = true
   previousX = event.clientX
   previousY = event.clientY
 
-  // 中央ボタンなら平行移動
   if (event.button === 1) {
     dragMode = 'pan'
   } else {
@@ -303,11 +319,9 @@ renderer.domElement.addEventListener('pointermove', (event) => {
   const deltaY = event.clientY - previousY
 
   if (dragMode === 'pan') {
-    // 平行移動
     modelRoot.position.x += deltaX * PAN_SPEED
     modelRoot.position.y -= deltaY * PAN_SPEED
   } else {
-    // 回転
     modelRoot.rotation.y += deltaX * ROTATE_SPEED
     modelRoot.rotation.x += deltaY * ROTATE_SPEED
   }
@@ -326,12 +340,10 @@ renderer.domElement.addEventListener('pointerleave', () => {
   dragMode = null
 })
 
-// 中央ボタンの余計な動作を防ぐ
 renderer.domElement.addEventListener('auxclick', (event) => {
   event.preventDefault()
 })
 
-// ホイール拡大縮小
 renderer.domElement.addEventListener(
   'wheel',
   (event) => {
@@ -348,10 +360,6 @@ renderer.domElement.addEventListener(
 // =====================
 // スマホ / タブレット操作
 // =====================
-
-// 1本指ドラッグ：回転
-// 2本指ドラッグ：平行移動
-// 2本指ピンチ：拡大縮小
 
 let touchMode = null
 let lastTouchX = 0
@@ -421,13 +429,12 @@ renderer.domElement.addEventListener(
       const deltaY = center.y - lastTouchY
       const deltaDistance = currentDistance - lastPinchDistance
 
-      // 2本指の中心移動で平行移動
       modelRoot.position.x += deltaX * PAN_SPEED
       modelRoot.position.y -= deltaY * PAN_SPEED
 
-      // 指の距離変化で拡大縮小
       zoomScale += deltaDistance * PINCH_ZOOM_SPEED
       zoomScale = THREE.MathUtils.clamp(zoomScale, MIN_ZOOM, MAX_ZOOM)
+
       applyZoom()
 
       lastTouchX = center.x
