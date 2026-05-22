@@ -149,7 +149,26 @@ loader.load(
 
 // モデルを画面内に収める
 function fitModelToView() {
+  // いったん全オブジェクトを対象にしてサイズ計算
+  const previousVisibleStates = []
+
+  layers.forEach((layer) => {
+    if (!layer.object) return
+
+    previousVisibleStates.push({
+      object: layer.object,
+      visible: layer.object.visible,
+    })
+
+    layer.object.visible = true
+  })
+
   const box = new THREE.Box3().setFromObject(modelRoot)
+
+  // 元の表示状態に戻す
+  previousVisibleStates.forEach((item) => {
+    item.object.visible = item.visible
+  })
 
   const size = new THREE.Vector3()
   const center = new THREE.Vector3()
@@ -157,23 +176,23 @@ function fitModelToView() {
   box.getSize(size)
   box.getCenter(center)
 
+  console.log('model size:', size)
+  console.log('model center:', center)
+
   if (size.length() === 0) return
 
-  // X/Z方向は中央合わせ
   modelRoot.position.x = -center.x
   modelRoot.position.z = -center.z
+  modelRoot.position.y = -center.y - size.y * 1.5
 
-  // Y方向は少し下げる
-  // 数値を大きくすると、画面内でモデルがさらに下に移動する
-  modelRoot.position.y = -center.y - size.y * 0.15
-
-  // モデルの大きさを画面に合わせる
   const maxSize = Math.max(size.x, size.y, size.z)
   const targetSize = 2.5
   const baseScale = targetSize / maxSize
 
   modelRoot.userData.baseScale = baseScale
   modelRoot.scale.setScalar(baseScale)
+
+  console.log('baseScale:', baseScale)
 }
 
 // =====================
