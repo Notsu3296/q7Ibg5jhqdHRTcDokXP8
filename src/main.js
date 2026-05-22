@@ -39,6 +39,46 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 app.appendChild(renderer.domElement)
 
 // =====================
+// ARモード用：カメラ背景
+// =====================
+
+const cameraVideo = document.createElement('video')
+cameraVideo.className = 'camera-video'
+cameraVideo.autoplay = true
+cameraVideo.playsInline = true
+cameraVideo.muted = true
+app.appendChild(cameraVideo)
+
+const arStartButton = document.createElement('button')
+arStartButton.className = 'ar-start-button'
+arStartButton.textContent = 'AR START'
+app.appendChild(arStartButton)
+
+async function startARMode() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+      },
+      audio: false,
+    })
+
+    cameraVideo.srcObject = stream
+    cameraVideo.style.display = 'block'
+    document.body.classList.add('ar-mode')
+    arStartButton.style.display = 'none'
+
+    scene.background = null
+    renderer.setClearColor(0x000000, 0)
+  } catch (error) {
+    console.error('カメラ起動に失敗:', error)
+    alert('カメラを起動できませんでした')
+  }
+}
+
+arStartButton.addEventListener('click', startARMode)
+
+// =====================
 // ライト設定
 // =====================
 
