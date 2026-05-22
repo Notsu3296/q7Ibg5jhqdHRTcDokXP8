@@ -70,9 +70,56 @@ async function startARMode() {
 
     scene.background = null
     renderer.setClearColor(0x000000, 0)
+    await enableGyro()
   } catch (error) {
     console.error('カメラ起動に失敗:', error)
     alert('カメラを起動できませんでした')
+  }
+}
+
+// =====================
+// ジャイロ許可・取得
+// =====================
+
+async function enableGyro() {
+  try {
+    // iPhone / iPad Safari 用
+    if (
+      typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function'
+    ) {
+      const permission = await DeviceOrientationEvent.requestPermission()
+
+      if (permission !== 'granted') {
+        console.warn('ジャイロ許可が拒否されました')
+        return
+      }
+    }
+
+    window.addEventListener('deviceorientation', handleDeviceOrientation)
+    gyroEnabled = true
+
+    console.log('ジャイロ有効')
+  } catch (error) {
+    console.error('ジャイロ有効化に失敗:', error)
+  }
+}
+
+function handleDeviceOrientation(event) {
+  if (!gyroEnabled) return
+
+  // beta: 前後の傾き
+  // gamma: 左右の傾き
+  gyroBeta = event.beta || 0
+  gyroGamma = event.gamma || 0
+
+  // 最初に取得した角度を基準にする
+  if (gyroBaseBeta === null) {
+    gyroBaseBeta = gyroBeta
+  }
+
+  if (gyroBaseGamma === null) {
+    gyroBaseGamma = gyroGamma
   }
 }
 
@@ -334,6 +381,25 @@ let previousY = 0
 let zoomScale = 1
 
 // =====================
+// ジャイロ設定
+// =====================
+
+// ジャイロが有効か
+let gyroEnabled = false
+
+// 端末の傾き
+let gyroBeta = 0   // 前後の傾き
+let gyroGamma = 0  // 左右の傾き
+
+// ジャイロの基準値
+let gyroBaseBeta = null
+let gyroBaseGamma = null
+
+// ジャイロの効き具合
+// 大きくすると傾きへの反応が強くなる
+const GYRO_ROTATE_STRENGTH = 0.01
+
+// =====================
 // PC操作
 // =====================
 
@@ -528,7 +594,17 @@ loadModel()
 
 function animate() {
   requestAnimationFrame(animate)
+
+  if (gyroEnabled && gyroBaseBeta !== null && gyroBaseGamma !== null) {
+    const deltaBeta = gyroBeta - gyroBaseBeta
+    const deltaGamma = gyroGamma - gyroBaseGamma
+
+    // 左右傾きでY回転
+    modelRoot.rotation.y += deltaGamma * GYRO_ROTATE_STRENGTH * 0.01
+
+    // 前後傾きでX回転
+    modelRoot.rotation.x += deltaBeta * GYRO_ROTATE_STRENGTH * 0.01
+  }
+
   renderer.render(scene, camera)
 }
-
-animate()
