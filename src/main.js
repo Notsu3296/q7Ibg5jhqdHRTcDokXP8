@@ -599,21 +599,20 @@ loadModel()
 function animate() {
   requestAnimationFrame(animate)
 
-  // ARモード中だけ、ジャイロでカメラ位置を少し動かす
+  // ARモード中だけ、ジャイロで視線方向を変える
   if (isARMode && gyroEnabled && gyroBaseBeta !== null && gyroBaseGamma !== null) {
     const deltaBeta = gyroBeta - gyroBaseBeta
     const deltaGamma = gyroGamma - gyroBaseGamma
 
-    // 傾き量を制限する
-    const viewX = THREE.MathUtils.clamp(deltaGamma * 0.02, -0.8, 0.8)
-    const viewY = THREE.MathUtils.clamp(deltaBeta * 0.02, -0.5, 0.5)
+    // 反応の強さ
+    const lookX = THREE.MathUtils.clamp(deltaGamma * 0.015, -0.6, 0.6)
+    const lookY = THREE.MathUtils.clamp(deltaBeta * 0.015, -0.4, 0.4)
 
-    // カメラを少し横・上下に動かす
-    camera.position.x = viewX
-    camera.position.y = viewY
+    // カメラ位置は固定
+    camera.position.set(0, 0, 5)
 
-    // カメラは常にモデル中心を見る
-    camera.lookAt(0, 0, 0)
+    // 視線だけを少し動かす
+    camera.lookAt(lookX, -lookY, 0)
   }
 
   renderer.render(scene, camera)
