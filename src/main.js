@@ -101,7 +101,7 @@ const layers = [
 // GLB読み込み
 function loadModel() {
   loader.load(
-    '/models/889.glb',
+    '/public/models/889.glb',
 
     // 読み込み成功
     (gltf) => {
