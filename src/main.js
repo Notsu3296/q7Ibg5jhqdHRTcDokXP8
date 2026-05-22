@@ -13,6 +13,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 // =====================
 
 const app = document.querySelector('#app')
+let isARMode = false
 
 // =====================
 // Three.js 基本設定
@@ -67,6 +68,7 @@ async function startARMode() {
     cameraVideo.style.display = 'block'
     document.body.classList.add('ar-mode')
     arStartButton.style.display = 'none'
+    isARMode = true
 
     scene.background = null
     renderer.setClearColor(0x000000, 0)
@@ -487,6 +489,7 @@ function getTouchDistance(touches) {
 renderer.domElement.addEventListener(
   'touchstart',
   (event) => {
+    if (isARMode) return
     event.preventDefault()
 
     if (event.touches.length === 1) {
@@ -511,6 +514,7 @@ renderer.domElement.addEventListener(
 renderer.domElement.addEventListener(
   'touchmove',
   (event) => {
+    if (isARMode) return
     event.preventDefault()
 
     if (touchMode === 'rotate' && event.touches.length === 1) {
